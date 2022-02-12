@@ -26,7 +26,7 @@ jobs:
     - name: Build
       run: |
         dir
-        set
+        dir env:
         go build -v
       env:
         CGO_CFLAGS: "-Ilibvlc-3.0.16\\build\\x64\\include"
