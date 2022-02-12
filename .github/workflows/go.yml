@@ -26,8 +26,8 @@ jobs:
     - name: Build
       run: go build -v
       env:
-        CGO_CFLAGS: "-IVideoLAN.LibVLC.Windows.3.0.16\\build\\x64\\include"
-        CGO_LDFLAGS: "-LVideoLAN.LibVLC.Windows.3.0.16\\build\\x64"
+        CGO_CFLAGS: "-Ilibvlc-3.0.16\\build\\x64\\include"
+        CGO_LDFLAGS: "-Llibvlc-3.0.16\\build\\x64"
 
    # - name: Test
    #   run: go test -v
