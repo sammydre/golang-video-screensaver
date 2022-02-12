@@ -25,8 +25,8 @@ jobs:
 
     - name: Build
       run: |
-        $Env:CGO_CFLAGS = "-I$pwd\\libvlc-3.0.16\\build\\x64\\include"
-        $Env:CGO_LDFLAGS = "-I$pwd\\libvlc-3.0.16\\build\\x64"
+        $Env:CGO_CFLAGS = "-I$pwd\libvlc-3.0.16\build\x64\include"
+        $Env:CGO_LDFLAGS = "-I$pwd\libvlc-3.0.16\build\x64"
         dir env:
         go build -v
 
