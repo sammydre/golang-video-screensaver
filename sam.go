@@ -1,7 +1,8 @@
 package main
 
+import "C"
+
 import (
-	"C"
 	crypto_rand "crypto/rand"
 	"encoding/binary"
 	"flag"
@@ -28,13 +29,13 @@ func thisIsALongFunctionName() {
 
 // possible we'll need a C shim if we need to fix up calling convention?
 
-//-export ScreenSaverProc
-func ScreenSaverProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+//-export ScreenSaverProcGo
+func ScreenSaverProcGo(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	return 0
 }
 
-//-export ScreenSaverConfigureDialog
-func ScreenSaverConfigureDialog(hdlg win.HWND, msg uint32, wParam, lParam uintptr) {
+//-export ScreenSaverConfigureDialogGo
+func ScreenSaverConfigureDialogGo(hdlg win.HWND, msg uint32, wParam, lParam uintptr) {
 }
 
 type VideoMainWindow struct {
@@ -228,11 +229,20 @@ func main() {
 
 	win.CoInitializeEx(nil, win.COINIT_MULTITHREADED)
 
+	// Standard arguments screensavers need to accept
+	_ = flag.Int64("a", 0, "Change the password; only for Win9x, unused on WinNT")
+	_ = flag.Bool("s", false, "Run the screensaver")
+	_ = flag.Int64("p", 0, "Preview")
+	_ = flag.Int64("c", 0, "Configure")
+
+	// Own own additional arguments
 	mediaPathPtr := flag.String("video-path", "", "Path to find videos in")
+
 	flag.Parse()
 
 	if *mediaPathPtr == "" {
 		log.Fatal("No video path provided")
+		// *mediaPathPtr = ""
 	}
 
 	monitorRects := listMonitors()
