@@ -16,27 +16,12 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	vlc "github.com/adrg/libvlc-go/v3"
+	// vlc "github.com/adrg/libvlc-go/v3"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
+	vlc "github.com/sammydre/golang-video-screensaver/vlcwrap"
 )
-
-//export thisIsALongFunctionName
-func thisIsALongFunctionName() {
-
-}
-
-// possible we'll need a C shim if we need to fix up calling convention?
-
-//-export ScreenSaverProcGo
-func ScreenSaverProcGo(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
-	return 0
-}
-
-//-export ScreenSaverConfigureDialogGo
-func ScreenSaverConfigureDialogGo(hdlg win.HWND, msg uint32, wParam, lParam uintptr) {
-}
 
 type VideoMainWindow struct {
 	mainWindow        *walk.MainWindow
