@@ -134,11 +134,8 @@ func (vmw *VideoWindowContext) Init() {
 	}.Create()
 
 	videoWidget, err := NewVlcVideoWidget(vmw.mainWindow, vmw)
-
 	if err != nil {
-		log.Fatal(err)
-	} else {
-		videoWidget.SetName("hello world")
+		log.Panic(err)
 	}
 
 	vmw.videoPlayer, err = vlc.NewPlayer()
