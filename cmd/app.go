@@ -23,7 +23,7 @@ import (
 	vlc "github.com/sammydre/golang-video-screensaver/vlcwrap"
 )
 
-type VideoMainWindow struct {
+type VideoWindowContext struct {
 	mainWindow        *walk.MainWindow
 	videoPlayer       *vlc.Player
 	endReachedEventId vlc.EventID
@@ -32,7 +32,7 @@ type VideoMainWindow struct {
 	Identifier        string
 }
 
-func (vmw *VideoMainWindow) getMedia() string {
+func (vmw *VideoWindowContext) getMedia() string {
 	var files []fs.FileInfo
 	files, err := ioutil.ReadDir(vmw.MediaPath)
 	if err != nil {
@@ -44,28 +44,109 @@ func (vmw *VideoMainWindow) getMedia() string {
 	return filepath.Join(vmw.MediaPath, files[index].Name())
 }
 
-func (vmw *VideoMainWindow) Init() {
+type VlcVideoWidget struct {
+	walk.WidgetBase
+	videoWindowContext *VideoWindowContext
+	cursorPos          win.POINT
+}
+
+const VlcVideoWidgetWindowClass = "VLC Video Widget Class"
+
+func NewVlcVideoWidget(parent walk.Container, vwc *VideoWindowContext) (*VlcVideoWidget, error) {
+	w := new(VlcVideoWidget)
+	w.videoWindowContext = vwc
+
+	if err := walk.InitWidget(
+		w,
+		parent,
+		VlcVideoWidgetWindowClass,
+		win.WS_VISIBLE,
+		0); err != nil {
+		return nil, err
+	}
+
+	bg, err := walk.NewSolidColorBrush(walk.RGB(0, 0, 0))
+	if err != nil {
+		return nil, err
+	}
+	w.SetBackground(bg)
+
+	if !win.GetCursorPos(&w.cursorPos) {
+		log.Panic("GetCursorPos failed")
+	}
+	win.SetCursor(0)
+
+	return w, nil
+}
+
+func (*VlcVideoWidget) CreateLayoutItem(ctx *walk.LayoutContext) walk.LayoutItem {
+	return &vlcVideoWidgetLayoutItem{idealSize: walk.SizeFrom96DPI(walk.Size{150, 150}, ctx.DPI())}
+}
+
+type vlcVideoWidgetLayoutItem struct {
+	walk.LayoutItemBase
+	idealSize walk.Size // in native pixels
+}
+
+func (li *vlcVideoWidgetLayoutItem) LayoutFlags() walk.LayoutFlags {
+	return walk.ShrinkableHorz | walk.ShrinkableVert | walk.GrowableHorz | walk.GrowableVert | walk.GreedyHorz | walk.GreedyVert
+}
+
+func (li *vlcVideoWidgetLayoutItem) IdealSize() walk.Size {
+	return li.idealSize
+}
+
+func (w *VlcVideoWidget) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case win.WM_NCACTIVATE, win.WM_ACTIVATE, win.WM_ACTIVATEAPP:
+		if wParam == 0 {
+			w.videoWindowContext.mainWindow.Close()
+		}
+	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_XBUTTONDOWN, win.WM_KEYDOWN, win.WM_KEYUP, win.WM_SYSKEYDOWN:
+		w.videoWindowContext.mainWindow.Close()
+	case win.WM_MOUSEMOVE:
+		var point = win.POINT{int32(win.GET_X_LPARAM(lParam)), int32(win.GET_Y_LPARAM(lParam))}
+		if point.X != w.cursorPos.X || point.Y != w.cursorPos.Y {
+			w.videoWindowContext.mainWindow.Close()
+		}
+	case win.WM_SETCURSOR:
+		return 0
+	}
+
+	return w.WidgetBase.WndProc(hwnd, msg, wParam, lParam)
+}
+
+func (vmw *VideoWindowContext) Init() {
+	// https://doxygen.reactos.org/d6/dc8/sdk_2lib_2scrnsave_2scrnsave_8c_source.html
+	// see above for behaviour we need
+
 	MainWindow{
 		AssignTo: &vmw.mainWindow,
 		Title:    "Video main window",
-		Layout:   VBox{},
-		Bounds:   vmw.Bounds,
+		Layout: VBox{
+			MarginsZero: true,
+			SpacingZero: true,
+		},
+		Bounds: vmw.Bounds,
 		Background: SolidColorBrush{
 			Color: walk.RGB(0, 0, 0),
 		},
-		OnMouseDown: func(x, y int, button walk.MouseButton) {
-			vmw.mainWindow.SetFullscreen(!vmw.mainWindow.Fullscreen())
-		},
 	}.Create()
 
-	var err error
+	videoWidget, err := NewVlcVideoWidget(vmw.mainWindow, vmw)
+
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		videoWidget.SetName("hello world")
+	}
 
 	vmw.videoPlayer, err = vlc.NewPlayer()
 	if err != nil {
 		log.Panic(err)
 	}
 
-	err = vmw.videoPlayer.SetHWND(uintptr(vmw.mainWindow.AsWindowBase().Handle()))
+	err = vmw.videoPlayer.SetHWND(uintptr(videoWidget.AsWindowBase().Handle()))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -119,7 +200,7 @@ func (vmw *VideoMainWindow) Init() {
 	vmw.mainWindow.SetFullscreen(true)
 }
 
-func (vmw *VideoMainWindow) Deinit() {
+func (vmw *VideoWindowContext) Deinit() {
 	if vmw.videoPlayer != nil {
 		manager, err := vmw.videoPlayer.EventManager()
 		if err != nil {
@@ -237,11 +318,15 @@ func main() {
 		log.Panic(err)
 	}
 
-	var windows []*VideoMainWindow
+	walk.AppendToWalkInit(func() {
+		walk.MustRegisterWindowClass(VlcVideoWidgetWindowClass)
+	})
+
+	var windows []*VideoWindowContext
 
 	for _, mon := range monitorRects {
 		rect := mon.Rect
-		var videoWindow *VideoMainWindow = &VideoMainWindow{
+		var videoWindow *VideoWindowContext = &VideoWindowContext{
 			MediaPath: *mediaPathPtr,
 			Bounds: Rectangle{
 				X:      int(rect.Left),
