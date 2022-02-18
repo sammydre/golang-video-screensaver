@@ -78,9 +78,9 @@ STUB_R_2(int, libvlc_audio_output_set, libvlc_media_player_t *, const char *);
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-int load_vlc_library(void)
+int load_vlc_library(const char *libname)
 {
-    HMODULE lib = LoadLibrary("libvlc.dll");
+    HMODULE lib = LoadLibrary(libname);
 
     if (!lib)
         return 0;

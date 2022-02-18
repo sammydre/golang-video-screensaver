@@ -4,7 +4,6 @@ import "testing"
 
 func TestParseCommandLineArgs(t *testing.T) {
 	var invalidArgs = [][]string{
-		[]string{},
 		[]string{"-a", "0"},
 		[]string{"/a", "ab0099"},
 		[]string{"-a"},
@@ -17,6 +16,10 @@ func TestParseCommandLineArgs(t *testing.T) {
 			t.Errorf("Testing '%v' does not return invalid command", args)
 		}
 
+	}
+
+	if parseCommandLineArgs([]string{}).ctype != RunScreenSaver {
+		t.Error("Empty not parsing")
 	}
 
 	if parseCommandLineArgs([]string{"/s"}).ctype != RunScreenSaver {

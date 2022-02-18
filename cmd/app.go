@@ -30,12 +30,12 @@ var InstallPath string
 var MediaPath string
 
 type VideoWindowContext struct {
-	mainWindow        *walk.MainWindow
-	videoPlayer       *vlc.Player
-	endReachedEventId vlc.EventID
-	MediaPath         string
-	Bounds            Rectangle
-	Identifier        string
+	mainWindow  *walk.MainWindow
+	videoWidget *VlcVideoWidget
+	MediaPath   string
+	Bounds      Rectangle
+	Identifier  string
+	Parent      win.HWND
 }
 
 func (vmw *VideoWindowContext) getMedia() string {
@@ -46,184 +46,67 @@ func (vmw *VideoWindowContext) getMedia() string {
 	}
 
 	var index = rand.Intn(len(files))
+	var ret = filepath.Join(vmw.MediaPath, files[index].Name())
 
-	return filepath.Join(vmw.MediaPath, files[index].Name())
-}
+	log.Printf("%s: playing file %s", vmw.Identifier, ret)
 
-type VlcVideoWidget struct {
-	walk.WidgetBase
-	videoWindowContext *VideoWindowContext
-	cursorPos          win.POINT
-}
-
-const VlcVideoWidgetWindowClass = "VLC Video Widget Class"
-
-func NewVlcVideoWidget(parent walk.Container, vwc *VideoWindowContext) (*VlcVideoWidget, error) {
-	w := new(VlcVideoWidget)
-	w.videoWindowContext = vwc
-
-	if err := walk.InitWidget(
-		w,
-		parent,
-		VlcVideoWidgetWindowClass,
-		win.WS_VISIBLE,
-		0); err != nil {
-		return nil, err
-	}
-
-	bg, err := walk.NewSolidColorBrush(walk.RGB(0, 0, 0))
-	if err != nil {
-		return nil, err
-	}
-	w.SetBackground(bg)
-
-	if !win.GetCursorPos(&w.cursorPos) {
-		log.Panic("GetCursorPos failed")
-	}
-	win.SetCursor(0)
-
-	return w, nil
-}
-
-func (*VlcVideoWidget) CreateLayoutItem(ctx *walk.LayoutContext) walk.LayoutItem {
-	return &vlcVideoWidgetLayoutItem{idealSize: walk.SizeFrom96DPI(walk.Size{150, 150}, ctx.DPI())}
-}
-
-type vlcVideoWidgetLayoutItem struct {
-	walk.LayoutItemBase
-	idealSize walk.Size // in native pixels
-}
-
-func (li *vlcVideoWidgetLayoutItem) LayoutFlags() walk.LayoutFlags {
-	return walk.ShrinkableHorz | walk.ShrinkableVert | walk.GrowableHorz | walk.GrowableVert | walk.GreedyHorz | walk.GreedyVert
-}
-
-func (li *vlcVideoWidgetLayoutItem) IdealSize() walk.Size {
-	return li.idealSize
-}
-
-func (w *VlcVideoWidget) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
-	switch msg {
-	case win.WM_NCACTIVATE, win.WM_ACTIVATE, win.WM_ACTIVATEAPP:
-		if wParam == 0 {
-			w.videoWindowContext.mainWindow.Close()
-		}
-	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_XBUTTONDOWN, win.WM_KEYDOWN, win.WM_KEYUP, win.WM_SYSKEYDOWN:
-		w.videoWindowContext.mainWindow.Close()
-	case win.WM_MOUSEMOVE:
-		var point = win.POINT{int32(win.GET_X_LPARAM(lParam)), int32(win.GET_Y_LPARAM(lParam))}
-		if point.X != w.cursorPos.X || point.Y != w.cursorPos.Y {
-			w.videoWindowContext.mainWindow.Close()
-		}
-	case win.WM_SETCURSOR:
-		return 0
-	}
-
-	return w.WidgetBase.WndProc(hwnd, msg, wParam, lParam)
+	return ret
 }
 
 func (vmw *VideoWindowContext) Init() {
 	// https://doxygen.reactos.org/d6/dc8/sdk_2lib_2scrnsave_2scrnsave_8c_source.html
 	// see above for behaviour we need
 
-	MainWindow{
-		AssignTo: &vmw.mainWindow,
-		Title:    "Video main window",
-		Layout: VBox{
-			MarginsZero: true,
-			SpacingZero: true,
-		},
-		Bounds: vmw.Bounds,
-		Background: SolidColorBrush{
-			Color: walk.RGB(0, 0, 0),
-		},
-	}.Create()
+	var videoWidget *VlcVideoWidget
+	var err error
 
-	videoWidget, err := NewVlcVideoWidget(vmw.mainWindow, vmw)
-	if err != nil {
-		log.Panic(err)
-	}
+	if vmw.Parent == win.HWND(0) {
+		MainWindow{
+			AssignTo: &vmw.mainWindow,
+			Title:    "Video main window",
+			Layout: VBox{
+				MarginsZero: true,
+				SpacingZero: true,
+			},
+			Bounds: vmw.Bounds,
+			Background: SolidColorBrush{
+				Color: walk.RGB(0, 0, 0),
+			},
+		}.Create()
 
-	vmw.videoPlayer, err = vlc.NewPlayer()
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = vmw.videoPlayer.SetHWND(uintptr(videoWidget.AsWindowBase().Handle()))
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = vmw.videoPlayer.SetKeyInput(false)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = vmw.videoPlayer.SetMouseInput(false)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = vmw.videoPlayer.SetAudioOutput("adummy")
-	if err != nil {
-		log.Print(err)
-	}
-
-	mediaFileName := vmw.getMedia()
-
-	log.Printf("%s: playing file %s", vmw.Identifier, mediaFileName)
-
-	_, err = vmw.videoPlayer.LoadMediaFromPath(mediaFileName)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = vmw.videoPlayer.SetMute(true)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	manager, err := vmw.videoPlayer.EventManager()
-	if err != nil {
-		log.Panic(err)
-	}
-
-	endReachedCallback := func(event vlc.Event, userData interface{}) {
-		// This callback is called from a somewhat uncertain context. I don't think
-		// we can safely call vlc functions in this state? (Maybe its not re-entrant?)
-		vmw.mainWindow.Synchronize(func() {
-			mediaFileName := vmw.getMedia()
-			log.Printf("%s: playing file %s", vmw.Identifier, mediaFileName)
-			vmw.videoPlayer.LoadMediaFromPath(mediaFileName)
-			vmw.videoPlayer.Play()
-		})
-	}
-
-	vmw.endReachedEventId, err = manager.Attach(vlc.MediaPlayerEndReached, endReachedCallback, nil)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	vmw.videoPlayer.Play()
-	vmw.mainWindow.SetFullscreen(true)
-}
-
-func (vmw *VideoWindowContext) Deinit() {
-	if vmw.videoPlayer != nil {
-		manager, err := vmw.videoPlayer.EventManager()
+		videoWidget, err = NewVlcVideoWidget(
+			vmw.mainWindow,
+			func() {
+				vmw.mainWindow.Close()
+			},
+			func() string {
+				return vmw.getMedia()
+			},
+			vmw.mainWindow.Synchronize)
 		if err != nil {
 			log.Panic(err)
 		}
-
-		manager.Detach(vmw.endReachedEventId)
-
-		if media, _ := vmw.videoPlayer.Media(); media != nil {
-			media.Release()
+	} else {
+		videoWidget, err = NewPreviewVlcVideoWidget(
+			vmw.Parent,
+			vmw.getMedia,
+			func(func()) {})
+		if err != nil {
+			log.Panic(err)
 		}
-
-		vmw.videoPlayer.Stop()
-		vmw.videoPlayer.Release()
 	}
+
+	vmw.videoWidget = videoWidget
+
+	if vmw.mainWindow != nil {
+		vmw.mainWindow.SetFullscreen(true)
+	}
+
+	vmw.videoWidget.SetupVlcPlayer()
+}
+
+func (vmw *VideoWindowContext) Deinit() {
+	vmw.videoWidget.Deinit()
 }
 
 type Monitor struct {
@@ -369,12 +252,13 @@ func runScreenSaver(parent win.HWND) {
 
 	monitorRects := listMonitors()
 
-	newpath := os.Getenv("PATH") + ";" + InstallPath
+	newpath := os.Getenv("PATH") + ";" + InstallPath + "\\libvlc-3.0.16\\build\\x64"
 	log.Print("Setting PATH to: ", newpath)
 	os.Setenv("PATH", newpath)
 
-	err := vlc.Init("--no-audio") // , "--verbose=2"
+	err := vlc.Init(InstallPath+"\\libvlc-3.0.16\\build\\x64", "--no-audio") // , "--verbose=2"
 	if err != nil {
+		log.Printf("win error was ", win.GetLastError())
 		log.Panic(err)
 	}
 
@@ -400,10 +284,36 @@ func runScreenSaver(parent win.HWND) {
 			windows = append(windows, videoWindow)
 		}
 	} else {
-		log.Fatal("TODO: run screensaver as a child of 'parent'")
+		// rect := mon.Rect
+		var videoWindow *VideoWindowContext = &VideoWindowContext{
+			MediaPath:  MediaPath,
+			Identifier: "Preview",
+			Parent:     parent,
+		}
+		videoWindow.Init()
+
+		windows = append(windows, videoWindow)
 	}
 
-	windows[0].mainWindow.Run()
+	if windows[0].mainWindow != nil {
+		windows[0].mainWindow.Run()
+	} else {
+		msg := (*win.MSG)(unsafe.Pointer(win.GlobalAlloc(0, unsafe.Sizeof(win.MSG{}))))
+		defer win.GlobalFree(win.HGLOBAL(unsafe.Pointer(msg)))
+
+		for {
+			switch win.GetMessage(msg, 0, 0, 0) {
+			case 0:
+				break // int(msg.WParam)
+
+			case -1:
+				break // return -1
+			}
+
+			win.TranslateMessage(msg)
+			win.DispatchMessage(msg)
+		}
+	}
 
 	for _, vmw := range windows {
 		vmw.Deinit()
@@ -434,7 +344,7 @@ func parseCommandLineArgs(args []string) Command {
 	// implemented that here.
 
 	var ignore int = -1
-	var command = Command{ctype: InvalidCommand}
+	var command = Command{ctype: RunScreenSaver}
 
 	for index, word := range args {
 		if index <= ignore {
@@ -444,6 +354,7 @@ func parseCommandLineArgs(args []string) Command {
 		switch word {
 		case "-a", "/a":
 			ignore = index + 1
+			command.ctype = InvalidCommand
 		case "-s", "/s":
 			command.ctype = RunScreenSaver
 		case "-p", "/p":
@@ -545,9 +456,24 @@ func setInstallPath(path string) {
 	InstallPath = path
 }
 
+func setupLogging() {
+	f, err := os.OpenFile(InstallPath+"\\log.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		log.Panicf("Error opening log file ", err)
+	}
+
+	log.SetOutput(f)
+
+	cwd, _ := os.Getwd()
+
+	log.Printf("Logging to file initialised. InstallPath %v MediaPath %v Cwd %v",
+		InstallPath, MediaPath, cwd)
+}
+
 func main() {
 	initRand()
 	loadRegistryEntries()
+	setupLogging()
 
 	cmd := parseCommandLineArgs(os.Args[1:])
 
