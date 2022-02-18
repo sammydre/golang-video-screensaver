@@ -70,6 +70,10 @@ STUB___1(libvlc_media_player_release, libvlc_media_player_t *);
 STUB___2(libvlc_media_player_set_hwnd, libvlc_media_player_t *, void *);
 STUB___2(libvlc_media_player_set_media,	libvlc_media_player_t *, libvlc_media_t *);
 STUB___1(libvlc_media_player_stop, libvlc_media_player_t *);
+STUB_R_1(libvlc_audio_output_t*, libvlc_audio_output_list_get,	libvlc_instance_t *);
+STUB___1(libvlc_audio_output_list_release, libvlc_audio_output_t *);
+STUB_R_2(int, libvlc_audio_output_set, libvlc_media_player_t *, const char *);
+
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -106,6 +110,9 @@ int load_vlc_library(void)
     LOAD(libvlc_media_player_set_hwnd);
     LOAD(libvlc_media_player_set_media);
     LOAD(libvlc_media_player_stop);
+    LOAD(libvlc_audio_output_list_get);
+    LOAD(libvlc_audio_output_list_release);
+    LOAD(libvlc_audio_output_set);
 
 #undef LOAD
 

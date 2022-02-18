@@ -124,6 +124,7 @@ var (
 	ErrModuleNotInitialized = errors.New("module not initialized")
 	ErrModuleInitialize     = errors.New("could not initialize module")
 	ErrLibraryLoad          = errors.New("could not load shared library")
+	ErrAudioOutputSet       = errors.New("audio output TODO")
 )
 
 // Player events.
@@ -377,6 +378,24 @@ func (p *Player) setMedia(m *Media) error {
 
 	C.libvlc_media_player_set_media(p.player, m.media)
 	return getError()
+}
+
+// SetAudioOutput sets the audio output to be used by the player. Any change
+// will take effect only after playback is stopped and restarted. The audio
+// output cannot be changed while playing.
+func (p *Player) SetAudioOutput(output string) error {
+	if err := p.assertInit(); err != nil {
+		return err
+	}
+
+	cOutput := C.CString(output)
+	defer C.free(unsafe.Pointer(cOutput))
+
+	if C.libvlc_audio_output_set(p.player, cOutput) != 0 {
+		return errOrDefault(getError(), ErrAudioOutputSet)
+	}
+
+	return nil
 }
 
 func (m *Media) assertInit() error {
@@ -682,4 +701,22 @@ func (or *objectRegistry) decRefs(id objectID) {
 	}
 
 	or.Unlock()
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Sam was here
+
+func AudioOutputList() []string {
+	audioOutputList := C.libvlc_audio_output_list_get(inst.handle)
+	defer C.libvlc_audio_output_list_release(audioOutputList)
+
+	var ret []string
+
+	var iter = audioOutputList
+	for iter != nil {
+		ret = append(ret, C.GoString(iter.psz_name))
+		iter = iter.p_next
+	}
+
+	return ret
 }

@@ -5,16 +5,19 @@ import "C"
 import (
 	crypto_rand "crypto/rand"
 	"encoding/binary"
-	"flag"
+	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 
 	// vlc "github.com/adrg/libvlc-go/v3"
 	"github.com/lxn/walk"
@@ -22,6 +25,9 @@ import (
 	"github.com/lxn/win"
 	vlc "github.com/sammydre/golang-video-screensaver/vlcwrap"
 )
+
+var InstallPath string
+var MediaPath string
 
 type VideoWindowContext struct {
 	mainWindow        *walk.MainWindow
@@ -158,6 +164,11 @@ func (vmw *VideoWindowContext) Init() {
 		log.Panic(err)
 	}
 
+	err = vmw.videoPlayer.SetAudioOutput("adummy")
+	if err != nil {
+		log.Print(err)
+	}
+
 	mediaFileName := vmw.getMedia()
 
 	log.Printf("%s: playing file %s", vmw.Identifier, mediaFileName)
@@ -287,55 +298,109 @@ func initRand() {
 	rand.Seed(int64(binary.LittleEndian.Uint64(b[:])))
 }
 
-func main() {
-	initRand()
+func showConfigureWindow() {
+	var mw *walk.MainWindow
+	var mediaPathTextEdit *walk.TextEdit
 
+	win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
+
+	MainWindow{
+		AssignTo: &mw,
+		Title:    "Configure Video Screensaver",
+		MinSize:  Size{300, 150},
+		Size:     Size{400, 150},
+		Layout:   VBox{},
+		// Font:     Font{Family: "Arial"},
+		Children: []Widget{
+			Label{
+				Text: "Use videos from:",
+			},
+			Composite{
+				Layout: HBox{MarginsZero: true},
+				Children: []Widget{
+					HSpacer{},
+					Label{
+						Text: MediaPath,
+					},
+					HSpacer{},
+					PushButton{
+						Text: "Browse",
+						OnClicked: func() {
+							log.Print("Button clicked")
+							dlg := new(walk.FileDialog)
+
+							dlg.Title = "Select a media path"
+							if ok, err := dlg.ShowBrowseFolder(mw); err != nil {
+								log.Fatalf("err is %v", err)
+								return
+							} else if !ok {
+								log.Print("not ok - user cancelled")
+								return
+							}
+
+							log.Printf("User selected media path %v", dlg.FilePath)
+
+							setMediaPath(dlg.FilePath)
+							mediaPathTextEdit.SetText(dlg.FilePath)
+						},
+					},
+				},
+			},
+			VSpacer{},
+			VSeparator{},
+			Composite{
+				Layout: HBox{MarginsZero: true},
+				Children: []Widget{
+					HSpacer{},
+					PushButton{
+						Text: "Ok",
+						OnClicked: func() {
+							mw.Close()
+						},
+					},
+				},
+			},
+		},
+	}.Run()
+}
+
+func runScreenSaver(parent win.HWND) {
 	win.CoInitializeEx(nil, win.COINIT_MULTITHREADED)
-
-	// Standard arguments screensavers need to accept
-	_ = flag.Int64("a", 0, "Change the password; only for Win9x, unused on WinNT")
-	_ = flag.Bool("s", false, "Run the screensaver")
-	_ = flag.Int64("p", 0, "Preview")
-	_ = flag.Int64("c", 0, "Configure")
-
-	// Own own additional arguments
-	mediaPathPtr := flag.String("video-path", "", "Path to find videos in")
-
-	flag.Parse()
-
-	if *mediaPathPtr == "" {
-		log.Fatal("No video path provided")
-		// *mediaPathPtr = ""
-	}
 
 	monitorRects := listMonitors()
 
-	err := vlc.Init()
+	newpath := os.Getenv("PATH") + ";" + InstallPath
+	log.Print("Setting PATH to: ", newpath)
+	os.Setenv("PATH", newpath)
+
+	err := vlc.Init("--no-audio") // , "--verbose=2"
 	if err != nil {
 		log.Panic(err)
 	}
 
-	walk.AppendToWalkInit(func() {
-		walk.MustRegisterWindowClass(VlcVideoWidgetWindowClass)
-	})
+	// log.Print(vlc.AudioOutputList())
 
 	var windows []*VideoWindowContext
 
-	for _, mon := range monitorRects {
-		rect := mon.Rect
-		var videoWindow *VideoWindowContext = &VideoWindowContext{
-			MediaPath: *mediaPathPtr,
-			Bounds: Rectangle{
-				X:      int(rect.Left),
-				Y:      int(rect.Top),
-				Width:  int(rect.Right - rect.Left),
-				Height: int(rect.Bottom - rect.Top),
-			},
-			Identifier: mon.Name,
-		}
-		videoWindow.Init()
+	if parent == win.HWND(0) {
+		for _, mon := range monitorRects {
+			rect := mon.Rect
+			var videoWindow *VideoWindowContext = &VideoWindowContext{
+				MediaPath: MediaPath,
+				Bounds: Rectangle{
+					X:      int(rect.Left),
+					Y:      int(rect.Top),
+					Width:  int(rect.Right - rect.Left),
+					Height: int(rect.Bottom - rect.Top),
+				},
+				Identifier: mon.Name,
+			}
+			videoWindow.Init()
 
-		windows = append(windows, videoWindow)
+			windows = append(windows, videoWindow)
+		}
+	} else {
+		log.Fatal("TODO: run screensaver as a child of 'parent'")
 	}
 
 	windows[0].mainWindow.Run()
@@ -345,4 +410,153 @@ func main() {
 	}
 
 	vlc.Release()
+}
+
+type CommandType int
+
+const (
+	InvalidCommand CommandType = iota
+	RunScreenSaver
+	PreviewScreenSaver
+	ConfigureScreenSaver
+)
+
+type Command struct {
+	ctype CommandType
+	hwnd  win.HWND
+}
+
+func parseCommandLineArgs(args []string) Command {
+	// https://docs.microsoft.com/en-us/troubleshoot/windows/win32/screen-saver-command-line
+
+	// The ReactOS sources suggest the configure case can additionally have an
+	// argument. But the MS documentation does not mention that. So I've not
+	// implemented that here.
+
+	var ignore int = -1
+	var command = Command{ctype: InvalidCommand}
+
+	for index, word := range args {
+		if index <= ignore {
+			continue
+		}
+
+		switch word {
+		case "-a", "/a":
+			ignore = index + 1
+		case "-s", "/s":
+			command.ctype = RunScreenSaver
+		case "-p", "/p":
+			command.ctype = PreviewScreenSaver
+		case "-c", "/c":
+			command.ctype = ConfigureScreenSaver
+		default:
+			switch command.ctype {
+			case PreviewScreenSaver:
+				parsedInt, err := strconv.ParseInt(word, 0, 64)
+				if err != nil {
+					return Command{ctype: InvalidCommand}
+				}
+				command.hwnd = win.HWND(parsedInt)
+			}
+		}
+	}
+
+	return command
+}
+
+func init() {
+	walk.AppendToWalkInit(func() {
+		walk.MustRegisterWindowClass(VlcVideoWidgetWindowClass)
+	})
+}
+
+func loadRegistryEntries() {
+	var err error
+
+	InstallPath, err = registryLoadString("Software\\sammydre\\golang-video-screensaver", "InstallPath")
+	if err != nil {
+		log.Printf("No install path, using the current working directory (error was: %v)", err)
+		InstallPath, _ = os.Getwd()
+	}
+	log.Printf("Using install path of %v", InstallPath)
+
+	MediaPath, err = registryLoadString("Software\\sammydre\\golang-video-screensaver", "MediaPath")
+	if err != nil {
+		log.Printf("No media path, using the current working directory (error was: %v)", err)
+		MediaPath, _ = os.Getwd()
+	}
+	log.Printf("Using media path of %v", MediaPath)
+}
+
+func registrySaveString(subKeyPath string, valueName string, value string) error {
+	// walk doesn't provide registry set/save functions. Nor even create key. So use the windows
+	// package for that.
+	key, openedExisting, err := registry.CreateKey(registry.CURRENT_USER, subKeyPath, registry.ALL_ACCESS)
+	if err != nil {
+		log.Panicf("RegCreateKeyEx: %v", windows.GetLastError())
+	}
+
+	defer key.Close()
+
+	if openedExisting {
+	}
+
+	err = key.SetStringValue(valueName, value)
+	if err != nil {
+		log.Panicf("RegSetValueEx: %v", windows.GetLastError())
+	}
+
+	return nil
+}
+
+func registryLoadString(subKeyPath string, valueName string) (string, error) {
+	key, err := registry.OpenKey(registry.CURRENT_USER, subKeyPath, registry.READ)
+	if err != nil {
+		return "", fmt.Errorf("%v: OpenKey() failed: %w", subKeyPath, err)
+	}
+	defer key.Close()
+
+	val, valType, err := key.GetStringValue(valueName)
+	if err != nil {
+		return "", fmt.Errorf("%v: GetStringValue(%v) failed: %w", subKeyPath, valueName, err)
+	}
+
+	if valType != registry.SZ {
+		return "", fmt.Errorf("%v: GetStringValue(%v) returned invalid type %v", subKeyPath, valueName, valType)
+	}
+
+	return val, nil
+}
+
+func setMediaPath(path string) {
+	registrySaveString(
+		"Software\\sammydre\\golang-video-screensaver",
+		"MediaPath",
+		path)
+	MediaPath = path
+}
+
+func setInstallPath(path string) {
+	registrySaveString(
+		"Software\\sammydre\\golang-video-screensaver",
+		"InstallPath",
+		path)
+	InstallPath = path
+}
+
+func main() {
+	initRand()
+	loadRegistryEntries()
+
+	cmd := parseCommandLineArgs(os.Args[1:])
+
+	switch cmd.ctype {
+	case RunScreenSaver:
+		runScreenSaver(win.HWND(0))
+	case PreviewScreenSaver:
+		runScreenSaver(cmd.hwnd)
+	case ConfigureScreenSaver:
+		showConfigureWindow()
+	}
 }
