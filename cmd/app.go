@@ -258,7 +258,6 @@ func runScreenSaver(parent win.HWND) {
 
 	err := vlc.Init(InstallPath+"\\libvlc-3.0.16\\build\\x64", "--no-audio") // , "--verbose=2"
 	if err != nil {
-		log.Printf("win error was ", win.GetLastError())
 		log.Panic(err)
 	}
 
@@ -459,7 +458,7 @@ func setInstallPath(path string) {
 func setupLogging() {
 	f, err := os.OpenFile(InstallPath+"\\log.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		log.Panicf("Error opening log file ", err)
+		log.Panicf("Error opening log file %v", err)
 	}
 
 	log.SetOutput(f)

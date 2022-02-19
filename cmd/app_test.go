@@ -18,7 +18,7 @@ func TestParseCommandLineArgs(t *testing.T) {
 
 	}
 
-	if parseCommandLineArgs([]string{}).ctype != RunScreenSaver {
+	if parseCommandLineArgs([]string{}).ctype != ConfigureScreenSaver {
 		t.Error("Empty not parsing")
 	}
 
