@@ -344,7 +344,7 @@ func parseCommandLineArgs(args []string) Command {
 	// implemented that here.
 
 	var ignore int = -1
-	var command = Command{ctype: RunScreenSaver}
+	var command = Command{ctype: ConfigureScreenSaver}
 
 	for index, word := range args {
 		if index <= ignore {
@@ -352,14 +352,14 @@ func parseCommandLineArgs(args []string) Command {
 		}
 
 		switch word {
-		case "-a", "/a":
+		case "-a", "/a", "/A":
 			ignore = index + 1
 			command.ctype = InvalidCommand
-		case "-s", "/s":
+		case "-s", "/s", "/S":
 			command.ctype = RunScreenSaver
-		case "-p", "/p":
+		case "-p", "/p", "/P":
 			command.ctype = PreviewScreenSaver
-		case "-c", "/c":
+		case "-c", "/c", "/C":
 			command.ctype = ConfigureScreenSaver
 		default:
 			switch command.ctype {
@@ -466,8 +466,8 @@ func setupLogging() {
 
 	cwd, _ := os.Getwd()
 
-	log.Printf("Logging to file initialised. InstallPath %v MediaPath %v Cwd %v",
-		InstallPath, MediaPath, cwd)
+	log.Printf("Logging to file initialised. InstallPath %v MediaPath %v Cwd %v Args %v",
+		InstallPath, MediaPath, cwd, os.Args)
 }
 
 func main() {
