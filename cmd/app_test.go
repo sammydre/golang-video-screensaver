@@ -15,7 +15,6 @@ func TestParseCommandLineArgs(t *testing.T) {
 		if parseCommandLineArgs(args).ctype != InvalidCommand {
 			t.Errorf("Testing '%v' does not return invalid command", args)
 		}
-
 	}
 
 	if parseCommandLineArgs([]string{}).ctype != ConfigureScreenSaver {

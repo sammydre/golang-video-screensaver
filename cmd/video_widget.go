@@ -66,6 +66,8 @@ func NewPreviewVlcVideoWidget(parent win.HWND, mediaPathCallback func() string, 
 func (vvw *VlcVideoWidget) SetupVlcPlayer() {
 	var err error
 
+	log.Print("Creating and initialising VLC player...")
+
 	vvw.videoPlayer, err = vlc.NewPlayer()
 	if err != nil {
 		log.Panic(err)
@@ -123,6 +125,7 @@ func (vvw *VlcVideoWidget) SetupVlcPlayer() {
 		log.Panic(err)
 	}
 
+	log.Print("VLC player initialised, playing")
 	vvw.videoPlayer.Play()
 }
 
@@ -176,7 +179,7 @@ func (w *VlcVideoWidget) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintp
 			w.screenSaverFinishCallback()
 		}
 	case win.WM_SETCURSOR:
-		return 0
+		return 1
 	}
 
 	return w.WidgetBase.WndProc(hwnd, msg, wParam, lParam)
