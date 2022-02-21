@@ -22,7 +22,7 @@ jobs:
       run: powershell build.ps1 -DownloadOnly
     
     - name: Build
-      run: powershell build.ps1
+      run: build.ps1
 
    # - name: Test
    #   run: go test -v
