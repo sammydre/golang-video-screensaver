@@ -9,11 +9,21 @@ For now, when run, it will play a random video from the given directory fullscre
 # Building
 
 ```
-go build github.com/sammydre/golang-video-screensaver/cmd
+go build ./...
 ```
 
 # Running
 
+To test it:
+
 ```
-cmd.exe --video-path "C:\Users\bob\Videos\Screensaver\Screensaver Videos"
+out/VideoScreensaver.scr /S
 ```
+
+To configure it:
+
+```
+out/VideoScreensaver.scr /C
+```
+
+It's designed to be installed as a regular screensaver. First it needs an installer, which is still a WIP...
