@@ -249,7 +249,7 @@ func runScreenSaver(parent win.HWND) {
 
 	monitorRects := listMonitors()
 
-	newpath := os.Getenv("PATH") + ";" + InstallPath + "\\libvlc-3.0.16\\build\\x64"
+	newpath := os.Getenv("PATH") + ";" + InstallPath + "\\out\\libvlc-3.0.16\\build\\x64"
 	log.Print("Setting PATH to: ", newpath)
 	os.Setenv("PATH", newpath)
 
@@ -297,13 +297,19 @@ func runScreenSaver(parent win.HWND) {
 		msg := (*win.MSG)(unsafe.Pointer(win.GlobalAlloc(0, unsafe.Sizeof(win.MSG{}))))
 		defer win.GlobalFree(win.HGLOBAL(unsafe.Pointer(msg)))
 
-		for {
+		var keepGoing = true
+
+		for keepGoing {
 			switch win.GetMessage(msg, 0, 0, 0) {
 			case 0:
-				break // int(msg.WParam)
+				keepGoing = false
+				continue
+				// break // int(msg.WParam)
 
 			case -1:
-				break // return -1
+				keepGoing = false
+				continue
+				// break // return -1
 			}
 
 			win.TranslateMessage(msg)
@@ -399,15 +405,12 @@ func loadRegistryEntries() {
 func registrySaveString(subKeyPath string, valueName string, value string) error {
 	// walk doesn't provide registry set/save functions. Nor even create key. So use the windows
 	// package for that.
-	key, openedExisting, err := registry.CreateKey(registry.CURRENT_USER, subKeyPath, registry.ALL_ACCESS)
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, subKeyPath, registry.ALL_ACCESS)
 	if err != nil {
 		log.Panicf("RegCreateKeyEx: %v", windows.GetLastError())
 	}
 
 	defer key.Close()
-
-	if openedExisting {
-	}
 
 	err = key.SetStringValue(valueName, value)
 	if err != nil {
@@ -442,14 +445,6 @@ func setMediaPath(path string) {
 		"MediaPath",
 		path)
 	MediaPath = path
-}
-
-func setInstallPath(path string) {
-	registrySaveString(
-		"Software\\sammydre\\golang-video-screensaver",
-		"InstallPath",
-		path)
-	InstallPath = path
 }
 
 func setupLogging() {
