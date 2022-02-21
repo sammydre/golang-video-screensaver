@@ -1,7 +1,5 @@
 package main
 
-import "C"
-
 import (
 	crypto_rand "crypto/rand"
 	"encoding/binary"
@@ -19,7 +17,6 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	// vlc "github.com/adrg/libvlc-go/v3"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
@@ -190,8 +187,8 @@ func showConfigureWindow() {
 	MainWindow{
 		AssignTo: &mw,
 		Title:    "Configure Video Screensaver",
-		MinSize:  Size{300, 150},
-		Size:     Size{400, 150},
+		MinSize:  Size{Width: 300, Height: 150},
+		Size:     Size{Width: 400, Height: 150},
 		Layout:   VBox{},
 		// Font:     Font{Family: "Arial"},
 		Children: []Widget{
@@ -256,7 +253,7 @@ func runScreenSaver(parent win.HWND) {
 	log.Print("Setting PATH to: ", newpath)
 	os.Setenv("PATH", newpath)
 
-	err := vlc.Init(InstallPath+"\\libvlc-3.0.16\\build\\x64", "--no-audio") // , "--verbose=2"
+	err := vlc.Init("--no-audio") // , "--verbose=2"
 	if err != nil {
 		log.Panic(err)
 	}

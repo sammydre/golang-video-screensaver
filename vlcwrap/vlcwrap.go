@@ -29,13 +29,14 @@ package vlcwrap
 // Code copied verbatim from https://github.com/adrg/libvlc-go then modified
 // for dynamic loading.
 
+// #cgo CFLAGS: -I ${SRCDIR}/../out/libvlc-3.0.16/build/x64/include
 /*
 #include <stdlib.h>
 
 #include <vlc/vlc.h>
 
 extern void eventDispatch(libvlc_event_t*, void*);
-extern int load_vlc_library(const char *);
+extern int load_vlc_library(void);
 
 static inline int eventAttach(libvlc_event_manager_t* em, libvlc_event_type_t et, unsigned long userData) {
     return libvlc_event_attach(em, et, (void (*)(const libvlc_event_t*, void*))eventDispatch, (void*)(intptr_t)userData);
@@ -193,7 +194,7 @@ func (i *instance) assertInit() error {
 // Init creates an instance of the libVLC module.
 // Must be called only once and the module instance must be released using
 // the Release function.
-func Init(vlcPath string, args ...string) error {
+func Init(args ...string) error {
 	if inst != nil {
 		return nil
 	}
@@ -211,9 +212,8 @@ func Init(vlcPath string, args ...string) error {
 	}()
 
 	// Hack: new code: add dynamic library load
-	if C.load_vlc_library(C.CString(vlcPath+"\\libvlc.dll")) == 0 {
+	if C.load_vlc_library() == 0 {
 		// FIXME: error msg
-		// log.Printf("Failed to load library %v", vlcPath+"\\libvlc.dll")
 		return ErrLibraryLoad
 	}
 	// End: new code

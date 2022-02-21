@@ -149,7 +149,7 @@ func (vvw *VlcVideoWidget) Deinit() {
 }
 
 func (*VlcVideoWidget) CreateLayoutItem(ctx *walk.LayoutContext) walk.LayoutItem {
-	return &vlcVideoWidgetLayoutItem{idealSize: walk.SizeFrom96DPI(walk.Size{150, 150}, ctx.DPI())}
+	return &vlcVideoWidgetLayoutItem{idealSize: walk.SizeFrom96DPI(walk.Size{Width: 150, Height: 150}, ctx.DPI())}
 }
 
 type vlcVideoWidgetLayoutItem struct {
@@ -174,7 +174,9 @@ func (w *VlcVideoWidget) WndProc(hwnd win.HWND, msg uint32, wParam, lParam uintp
 	case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_XBUTTONDOWN, win.WM_KEYDOWN, win.WM_KEYUP, win.WM_SYSKEYDOWN:
 		w.screenSaverFinishCallback()
 	case win.WM_MOUSEMOVE:
-		var point = win.POINT{int32(win.GET_X_LPARAM(lParam)), int32(win.GET_Y_LPARAM(lParam))}
+		var point = win.POINT{
+			X: int32(win.GET_X_LPARAM(lParam)),
+			Y: int32(win.GET_Y_LPARAM(lParam))}
 		if point.X != w.cursorPos.X || point.Y != w.cursorPos.Y {
 			w.screenSaverFinishCallback()
 		}

@@ -18,8 +18,7 @@
     ],
     "options": {
         "env": {
-            "CGO_CFLAGS": "-I${workspaceFolder}\\libvlc-3.0.16\\build\\x64\\include",
-            "CGO_LDFLAGS": "-L${workspaceFolder}\\libvlc-3.0.16\\build\\x64"
+            "CGO_CFLAGS": "-I${workspaceFolder}\\out\\libvlc-3.0.16\\build\\x64\\include",
         }
     }
 }

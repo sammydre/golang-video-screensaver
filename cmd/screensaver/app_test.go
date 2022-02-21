@@ -4,11 +4,11 @@ import "testing"
 
 func TestParseCommandLineArgs(t *testing.T) {
 	var invalidArgs = [][]string{
-		[]string{"-a", "0"},
-		[]string{"/a", "ab0099"},
-		[]string{"-a"},
-		[]string{"/a"},
-		[]string{"/p", "not a number"},
+		{"-a", "0"},
+		{"/a", "ab0099"},
+		{"-a"},
+		{"/a"},
+		{"/p", "not a number"},
 	}
 
 	for _, args := range invalidArgs {

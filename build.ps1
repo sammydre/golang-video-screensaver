@@ -14,7 +14,7 @@ function Invoke-NativeCommand {
 
 # This function name doesn't quite follow the "<ApprovedVerb>-<Prefix><SingularNoun>"
 # naming convention... Oh well!
-function Download-And-Extract-Zip {
+function Get-And-Extract-Zip {
     param([String]$Destination="") 
 
     $url = $args[0]
@@ -53,4 +53,4 @@ Write-Output "Building installer"
 Invoke-NativeCommand go build -v -o "out/VideoGalleryInstaller.exe" github.com/sammydre/golang-video-screensaver/cmd/installer
 
 Write-Output "Compressing installer"
-Invoke-NativeCommand "out\upx-3.96-win64\upx.exe" "out\VideoGalleryInstaller.exe"
+Invoke-NativeCommand "out\upx-3.96-win64\upx.exe" -qq "out\VideoGalleryInstaller.exe"
