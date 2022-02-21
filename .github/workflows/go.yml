@@ -18,16 +18,11 @@ jobs:
       with:
         go-version: 1.17
         
-    - name: Get VLC dependency
-      run: |
-        Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/VideoLAN.LibVLC.Windows/3.0.16" -OutFile "libvlc-3.0.16.zip"
-        Expand-Archive -Path "libvlc-3.0.16.zip"
+    - name: Download dependencies
+      run: powershell build.ps1 -DownloadOnly
     
-    - name: Build Go
-      run: |
-        $Env:CGO_CFLAGS = "-I$pwd\libvlc-3.0.16\build\x64\include"
-        $Env:CGO_LDFLAGS = "-L$pwd\libvlc-3.0.16\build\x64"
-        go build -v -x
+    - name: Build
+      run: powershell build.ps1
 
    # - name: Test
    #   run: go test -v
