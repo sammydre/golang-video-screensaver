@@ -26,5 +26,5 @@ jobs:
       shell: pwsh
       run: ./build.ps1
 
-   # - name: Test
-   #   run: go test -v
+    - name: Test
+      run: go test .\...
