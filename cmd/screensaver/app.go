@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/windows/registry"
 
 	"github.com/lxn/walk"
-	. "github.com/lxn/walk/declarative"
+	"github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 	vlc "github.com/sammydre/golang-video-screensaver/vlcwrap"
 )
@@ -30,7 +30,7 @@ type VideoWindowContext struct {
 	mainWindow  *walk.MainWindow
 	videoWidget *VlcVideoWidget
 	MediaPath   string
-	Bounds      Rectangle
+	Bounds      declarative.Rectangle
 	Identifier  string
 	Parent      win.HWND
 }
@@ -58,15 +58,15 @@ func (vmw *VideoWindowContext) Init() {
 	var err error
 
 	if vmw.Parent == win.HWND(0) {
-		MainWindow{
+		declarative.MainWindow{
 			AssignTo: &vmw.mainWindow,
 			Title:    "Video main window",
-			Layout: VBox{
+			Layout: declarative.VBox{
 				MarginsZero: true,
 				SpacingZero: true,
 			},
 			Bounds: vmw.Bounds,
-			Background: SolidColorBrush{
+			Background: declarative.SolidColorBrush{
 				Color: walk.RGB(0, 0, 0),
 			},
 		}.Create()
@@ -184,26 +184,26 @@ func showConfigureWindow() {
 
 	win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
 
-	MainWindow{
+	declarative.MainWindow{
 		AssignTo: &mw,
 		Title:    "Configure Video Screensaver",
-		MinSize:  Size{Width: 300, Height: 150},
-		Size:     Size{Width: 400, Height: 150},
-		Layout:   VBox{},
+		MinSize:  declarative.Size{Width: 300, Height: 150},
+		Size:     declarative.Size{Width: 400, Height: 150},
+		Layout:   declarative.VBox{},
 		// Font:     Font{Family: "Arial"},
-		Children: []Widget{
-			Label{
+		Children: []declarative.Widget{
+			declarative.Label{
 				Text: "Use videos from:",
 			},
-			Composite{
-				Layout: HBox{MarginsZero: true},
-				Children: []Widget{
-					HSpacer{},
-					Label{
+			declarative.Composite{
+				Layout: declarative.HBox{MarginsZero: true},
+				Children: []declarative.Widget{
+					declarative.HSpacer{},
+					declarative.Label{
 						Text: MediaPath,
 					},
-					HSpacer{},
-					PushButton{
+					declarative.HSpacer{},
+					declarative.PushButton{
 						Text: "Browse",
 						OnClicked: func() {
 							log.Print("Button clicked")
@@ -226,13 +226,13 @@ func showConfigureWindow() {
 					},
 				},
 			},
-			VSpacer{},
-			VSeparator{},
-			Composite{
-				Layout: HBox{MarginsZero: true},
-				Children: []Widget{
-					HSpacer{},
-					PushButton{
+			declarative.VSpacer{},
+			declarative.VSeparator{},
+			declarative.Composite{
+				Layout: declarative.HBox{MarginsZero: true},
+				Children: []declarative.Widget{
+					declarative.HSpacer{},
+					declarative.PushButton{
 						Text: "Ok",
 						OnClicked: func() {
 							mw.Close()
@@ -267,7 +267,7 @@ func runScreenSaver(parent win.HWND) {
 			rect := mon.Rect
 			var videoWindow *VideoWindowContext = &VideoWindowContext{
 				MediaPath: MediaPath,
-				Bounds: Rectangle{
+				Bounds: declarative.Rectangle{
 					X:      int(rect.Left),
 					Y:      int(rect.Top),
 					Width:  int(rect.Right - rect.Left),
