@@ -1,4 +1,7 @@
-param([switch]$DownloadOnly)
+param(
+    [switch]$DownloadOnly,
+    [switch]$DontCompress
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -52,5 +55,7 @@ Invoke-NativeCommand go build -v -ldflags -H=windowsgui -o "out/VideoGallery.scr
 Write-Output "Building installer"
 Invoke-NativeCommand go build -v -o "out/VideoGalleryInstaller.exe" github.com/sammydre/golang-video-screensaver/cmd/installer
 
-Write-Output "Compressing installer"
-Invoke-NativeCommand "out\upx-3.96-win64\upx.exe" -qq "out\VideoGalleryInstaller.exe"
+if (-not($DontCompress)) {
+    Write-Output "Compressing installer"
+    Invoke-NativeCommand "out\upx-3.96-win64\upx.exe" -qq "out\VideoGalleryInstaller.exe"
+}
