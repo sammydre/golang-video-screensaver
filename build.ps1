@@ -36,11 +36,11 @@ function Get-And-Extract-Zip {
 $ignored=New-Item -Path .\out -ItemType Directory -Force
 
 if (-not(Test-Path -Path "out\upx-3.96-win64\upx.exe" -PathType Leaf)) {
-    Download-And-Extract-Zip "https://github.com/upx/upx/releases/download/v3.96/upx-3.96-win64.zip"
+    Get-And-Extract-Zip "https://github.com/upx/upx/releases/download/v3.96/upx-3.96-win64.zip"
 }
 
 if (-not(Test-Path -Path "out\libvlc-3.0.16\build\x64\libvlc.dll" -PathType Leaf)) {
-    Download-And-Extract-Zip "https://www.nuget.org/api/v2/package/VideoLAN.LibVLC.Windows/3.0.16" -Destination "libvlc-3.0.16"
+    Get-And-Extract-Zip "https://www.nuget.org/api/v2/package/VideoLAN.LibVLC.Windows/3.0.16" -Destination "libvlc-3.0.16"
 }
 
 if ($DownloadOnly.IsPresent) {
