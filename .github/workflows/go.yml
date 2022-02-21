@@ -19,10 +19,12 @@ jobs:
         go-version: 1.17
         
     - name: Download dependencies
-      run: powershell build.ps1 -DownloadOnly
+      shell: pwsh
+      run: ./build.ps1 -DownloadOnly
     
     - name: Build
-      run: powershell build.ps1
+      shell: pwsh
+      run: ./build.ps1
 
    # - name: Test
    #   run: go test -v
