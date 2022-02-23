@@ -3,7 +3,6 @@ package main
 import (
 	crypto_rand "crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"log"
@@ -15,11 +14,11 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 
 	"github.com/lxn/walk"
 	"github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
+	"github.com/sammydre/golang-video-screensaver/common"
 	vlc "github.com/sammydre/golang-video-screensaver/vlcwrap"
 )
 
@@ -387,14 +386,14 @@ func init() {
 func loadRegistryEntries() {
 	var err error
 
-	InstallPath, err = registryLoadString("Software\\sammydre\\golang-video-screensaver", "InstallPath")
+	InstallPath, err = common.RegistryLoadString("Software\\sammydre\\golang-video-screensaver", "InstallPath")
 	if err != nil {
 		log.Printf("No install path, using the current working directory (error was: %v)", err)
 		InstallPath, _ = os.Getwd()
 	}
 	log.Printf("Using install path of %v", InstallPath)
 
-	MediaPath, err = registryLoadString("Software\\sammydre\\golang-video-screensaver", "MediaPath")
+	MediaPath, err = common.RegistryLoadString("Software\\sammydre\\golang-video-screensaver", "MediaPath")
 	if err != nil {
 		log.Printf("No media path, using the current working directory (error was: %v)", err)
 		MediaPath, _ = os.Getwd()
@@ -402,45 +401,8 @@ func loadRegistryEntries() {
 	log.Printf("Using media path of %v", MediaPath)
 }
 
-func registrySaveString(subKeyPath string, valueName string, value string) error {
-	// walk doesn't provide registry set/save functions. Nor even create key. So use the windows
-	// package for that.
-	key, _, err := registry.CreateKey(registry.CURRENT_USER, subKeyPath, registry.ALL_ACCESS)
-	if err != nil {
-		log.Panicf("RegCreateKeyEx: %v", windows.GetLastError())
-	}
-
-	defer key.Close()
-
-	err = key.SetStringValue(valueName, value)
-	if err != nil {
-		log.Panicf("RegSetValueEx: %v", windows.GetLastError())
-	}
-
-	return nil
-}
-
-func registryLoadString(subKeyPath string, valueName string) (string, error) {
-	key, err := registry.OpenKey(registry.CURRENT_USER, subKeyPath, registry.READ)
-	if err != nil {
-		return "", fmt.Errorf("%v: OpenKey() failed: %w", subKeyPath, err)
-	}
-	defer key.Close()
-
-	val, valType, err := key.GetStringValue(valueName)
-	if err != nil {
-		return "", fmt.Errorf("%v: GetStringValue(%v) failed: %w", subKeyPath, valueName, err)
-	}
-
-	if valType != registry.SZ {
-		return "", fmt.Errorf("%v: GetStringValue(%v) returned invalid type %v", subKeyPath, valueName, valType)
-	}
-
-	return val, nil
-}
-
 func setMediaPath(path string) {
-	registrySaveString(
+	common.RegistrySaveString(
 		"Software\\sammydre\\golang-video-screensaver",
 		"MediaPath",
 		path)

@@ -2,33 +2,14 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"log"
 	"os"
 	"path"
 	"strings"
 
 	screensaver "github.com/sammydre/golang-video-screensaver"
+	"github.com/sammydre/golang-video-screensaver/common"
 )
-
-type installTracker interface {
-	trackFile(string)
-	trackDirectory(string)
-	trackRegistryEntry(string)
-}
-
-type installConfiguration interface {
-	install(*installTracker, string) error
-}
-
-type fileSystemInstallConfiguration struct {
-	fs       embed.FS
-	trimPath string
-}
-
-type singleFileInstallConfiguration struct {
-	file []byte
-}
 
 func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath string) error {
 	dirEntries, err := fs.ReadDir(path.Clean(dirPath))
@@ -99,29 +80,88 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 	return nil
 }
 
-func (cfg *fileSystemInstallConfiguration) install(tracker *installTracker, destPath string) error {
-	err := recursiveFsInstaller(cfg.fs, cfg.trimPath, ".", destPath)
+type fsInstallDescripion struct {
+	fs       embed.FS
+	trimPath string
+	addPath  string
+}
+
+func (fid *fsInstallDescripion) install(destPath string) error {
+	destPath = path.Join(destPath, fid.addPath)
+	return recursiveFsInstaller(fid.fs, fid.trimPath, ".", destPath)
+}
+
+type fileInstallDescription struct {
+	data    []byte
+	name    string
+	addPath string
+}
+
+func (fid *fileInstallDescription) install(destPath string) error {
+	destPath = path.Join(destPath, fid.addPath)
+
+	err := os.MkdirAll(destPath, 0)
 	if err != nil {
-		return fmt.Errorf("installing files to %v: %w", destPath, err)
+		return err
+	}
+
+	err = os.WriteFile(path.Join(destPath, fid.name), fid.data, 0)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (cfg *singleFileInstallConfiguration) install(tracker *installTracker, destPath string) error {
+type registryInstallDescription struct {
+	subKeyPath string
+	valueName  string
+	value      string
+}
+
+func (rid *registryInstallDescription) install(destPath string) error {
+	return common.RegistrySaveString(rid.subKeyPath, rid.valueName, rid.value)
+}
+
+type installInstance interface {
+	install(string) error
+}
+
+type installDescription struct {
+	instances []installInstance
+}
+
+func install(desc *installDescription, installPath string) error {
+	for _, inst := range desc.instances {
+		err := inst.install(installPath)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func main() {
-	// log.Print("Hello world ", len(screensaver.VideoGalleryExe))
-
-	var libVlcInstallConfig = fileSystemInstallConfiguration{
-		fs:       screensaver.LibVlc,
-		trimPath: "out/libvlc-3.0.16/build/x64",
+	var installDesc = installDescription{
+		instances: []installInstance{
+			&fsInstallDescripion{
+				fs:       screensaver.LibVlc,
+				trimPath: "out/libvlc-3.0.16/build/x64",
+				addPath:  "",
+			},
+			&fileInstallDescription{
+				data:    screensaver.VideoGalleryExe,
+				name:    "VideoGallery.scr",
+				addPath: "",
+			},
+			&registryInstallDescription{
+				subKeyPath: "Software\\sammydre\\golang-video-screensaver",
+				valueName:  "InstallPath",
+				value:      "${InstallPath}",
+			},
+		},
 	}
 
-	err := libVlcInstallConfig.install(nil, "C:\\Users\\sam\\AppData\\Local\\Temp\\SamSam")
-	if err != nil {
-		log.Print(err)
-	}
+	install(&installDesc, "C:\\Users\\sam\\AppData\\Local\\golang-video-screensaver")
 }
