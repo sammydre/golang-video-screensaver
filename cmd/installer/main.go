@@ -7,6 +7,9 @@ import (
 	"path"
 	"strings"
 
+	"github.com/lxn/walk"
+	"github.com/lxn/walk/declarative"
+	"github.com/lxn/win"
 	screensaver "github.com/sammydre/golang-video-screensaver"
 	"github.com/sammydre/golang-video-screensaver/common"
 )
@@ -80,6 +83,25 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 	return nil
 }
 
+func recursiveFsCount(fs embed.FS, dirPath string) int {
+	dirEntries, err := fs.ReadDir(path.Clean(dirPath))
+	if err != nil {
+		return 0
+	}
+
+	var ret = 0
+
+	for _, dirEntry := range dirEntries {
+		if dirEntry.IsDir() {
+			ret += recursiveFsCount(fs, path.Join(dirPath, dirEntry.Name()))
+		} else {
+			ret += 1
+		}
+	}
+
+	return ret
+}
+
 type fsInstallDescripion struct {
 	fs       embed.FS
 	trimPath string
@@ -89,6 +111,10 @@ type fsInstallDescripion struct {
 func (fid *fsInstallDescripion) install(destPath string) error {
 	destPath = path.Join(destPath, fid.addPath)
 	return recursiveFsInstaller(fid.fs, fid.trimPath, ".", destPath)
+}
+
+func (fid *fsInstallDescripion) count() int {
+	return recursiveFsCount(fid.fs, ".")
 }
 
 type fileInstallDescription struct {
@@ -113,6 +139,10 @@ func (fid *fileInstallDescription) install(destPath string) error {
 	return nil
 }
 
+func (rid *fileInstallDescription) count() int {
+	return 1
+}
+
 type registryInstallDescription struct {
 	subKeyPath string
 	valueName  string
@@ -123,15 +153,20 @@ func (rid *registryInstallDescription) install(destPath string) error {
 	return common.RegistrySaveString(rid.subKeyPath, rid.valueName, rid.value)
 }
 
+func (rid *registryInstallDescription) count() int {
+	return 1
+}
+
 type installInstance interface {
 	install(string) error
+	count() int
 }
 
 type installDescription struct {
 	instances []installInstance
 }
 
-func install(desc *installDescription, installPath string) error {
+func (desc *installDescription) install(installPath string) error {
 	for _, inst := range desc.instances {
 		err := inst.install(installPath)
 		if err != nil {
@@ -142,7 +177,65 @@ func install(desc *installDescription, installPath string) error {
 	return nil
 }
 
+func (desc *installDescription) count() int {
+	var ret = 0
+	for _, inst := range desc.instances {
+		ret += inst.count()
+	}
+	return ret
+}
+
+func installerGui(installDir string, desc *installDescription) {
+	var mw *walk.MainWindow
+	var progress *walk.ProgressBar
+	var topLabel *walk.Label
+
+	numItemsToInstall := desc.count()
+
+	win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
+
+	declarative.MainWindow{
+		AssignTo: &mw,
+		Title:    "Video Screensaver Installer",
+		MinSize:  declarative.Size{Width: 300, Height: 150},
+		Size:     declarative.Size{Width: 400, Height: 150},
+		Layout:   declarative.VBox{},
+		Children: []declarative.Widget{
+			declarative.Label{
+				AssignTo: &topLabel,
+				Text:     "Ready to install",
+			},
+			declarative.ProgressBar{
+				MinValue: 0,
+				MaxValue: numItemsToInstall,
+				Value:    0,
+				AssignTo: &progress,
+			},
+			declarative.VSpacer{},
+			declarative.VSeparator{},
+			declarative.Composite{
+				Layout: declarative.HBox{MarginsZero: true},
+				Children: []declarative.Widget{
+					declarative.HSpacer{},
+					declarative.PushButton{
+						Text: "Install",
+						OnClicked: func() {
+							progress.SetValue(1)
+							topLabel.SetText("Installing...")
+						},
+					},
+				},
+			},
+		},
+	}.Run()
+}
+
 func main() {
+	installDir, err := walk.LocalAppDataPath()
+	if err != nil {
+		log.Panicf("Failed to find local app data path")
+	}
+
 	var installDesc = installDescription{
 		instances: []installInstance{
 			&fsInstallDescripion{
@@ -163,5 +256,6 @@ func main() {
 		},
 	}
 
-	install(&installDesc, "C:\\Users\\sam\\AppData\\Local\\golang-video-screensaver")
+	installerGui(installDir, &installDesc)
+	// install(&installDesc, "C:\\Users\\sam\\AppData\\Local\\golang-video-screensaver")
 }
