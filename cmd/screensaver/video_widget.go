@@ -117,6 +117,7 @@ func (vvw *VlcVideoWidget) SetupVlcPlayer() {
 			mediaFileName := vvw.nextMediaFileCallback()
 			vvw.videoPlayer.LoadMediaFromPath(mediaFileName)
 			vvw.videoPlayer.Play()
+			win.SetCursor(0)
 		})
 	}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lxn/walk"
 	"github.com/lxn/walk/declarative"
@@ -14,7 +15,7 @@ import (
 	"github.com/sammydre/golang-video-screensaver/common"
 )
 
-func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath string) error {
+func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath string, progress func()) error {
 	dirEntries, err := fs.ReadDir(path.Clean(dirPath))
 	if err != nil {
 		return err
@@ -36,7 +37,7 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 				log.Printf("Skipping %v due to match again trim %v", filePath, trimPath)
 
 				if dirEntry.IsDir() {
-					err = recursiveFsInstaller(fs, trimPath, filePath, destPath)
+					err = recursiveFsInstaller(fs, trimPath, filePath, destPath, progress)
 					if err != nil {
 						return err
 					}
@@ -52,11 +53,12 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 		log.Print(filePath, " -> ", fileDestPath)
 
 		if dirEntry.IsDir() {
-			err := os.Mkdir(fileDestPath, 0)
+			err := os.MkdirAll(fileDestPath, 0)
 			if err != nil {
 				return err
 			}
-			err = recursiveFsInstaller(fs, trimPath, filePath, destPath)
+
+			err = recursiveFsInstaller(fs, trimPath, filePath, destPath, progress)
 			if err != nil {
 				return err
 			}
@@ -74,9 +76,12 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 			// But it shouldn't be relevant to us here, especially on Windows.
 			err = os.WriteFile(fileDestPath, data, 0)
 			if err != nil {
+				log.Printf("Error writing file, %v", err)
 				// TODO: fmt.Errorf() for a better desc
 				return err
 			}
+
+			progress()
 		}
 	}
 
@@ -108,9 +113,9 @@ type fsInstallDescripion struct {
 	addPath  string
 }
 
-func (fid *fsInstallDescripion) install(destPath string) error {
+func (fid *fsInstallDescripion) install(destPath string, progress func()) error {
 	destPath = path.Join(destPath, fid.addPath)
-	return recursiveFsInstaller(fid.fs, fid.trimPath, ".", destPath)
+	return recursiveFsInstaller(fid.fs, fid.trimPath, ".", destPath, progress)
 }
 
 func (fid *fsInstallDescripion) count() int {
@@ -123,7 +128,7 @@ type fileInstallDescription struct {
 	addPath string
 }
 
-func (fid *fileInstallDescription) install(destPath string) error {
+func (fid *fileInstallDescription) install(destPath string, progress func()) error {
 	destPath = path.Join(destPath, fid.addPath)
 
 	err := os.MkdirAll(destPath, 0)
@@ -135,6 +140,8 @@ func (fid *fileInstallDescription) install(destPath string) error {
 	if err != nil {
 		return err
 	}
+
+	progress()
 
 	return nil
 }
@@ -149,8 +156,12 @@ type registryInstallDescription struct {
 	value      string
 }
 
-func (rid *registryInstallDescription) install(destPath string) error {
-	return common.RegistrySaveString(rid.subKeyPath, rid.valueName, rid.value)
+func (rid *registryInstallDescription) install(destPath string, progress func()) error {
+	value := strings.Replace(rid.value, "${InstallPath}", destPath, -1)
+
+	ret := common.RegistrySaveString(rid.subKeyPath, rid.valueName, value)
+	progress()
+	return ret
 }
 
 func (rid *registryInstallDescription) count() int {
@@ -158,7 +169,7 @@ func (rid *registryInstallDescription) count() int {
 }
 
 type installInstance interface {
-	install(string) error
+	install(string, func()) error
 	count() int
 }
 
@@ -166,9 +177,9 @@ type installDescription struct {
 	instances []installInstance
 }
 
-func (desc *installDescription) install(installPath string) error {
+func (desc *installDescription) install(installPath string, progress func()) error {
 	for _, inst := range desc.instances {
-		err := inst.install(installPath)
+		err := inst.install(installPath, progress)
 		if err != nil {
 			return err
 		}
@@ -185,7 +196,7 @@ func (desc *installDescription) count() int {
 	return ret
 }
 
-func installerGui(installDir string, desc *installDescription) {
+func installerGui(installDir string, desc installInstance) {
 	var mw *walk.MainWindow
 	var progress *walk.ProgressBar
 	var topLabel *walk.Label
@@ -194,7 +205,7 @@ func installerGui(installDir string, desc *installDescription) {
 
 	win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
 
-	declarative.MainWindow{
+	err := declarative.MainWindow{
 		AssignTo: &mw,
 		Title:    "Video Screensaver Installer",
 		MinSize:  declarative.Size{Width: 300, Height: 150},
@@ -220,14 +231,28 @@ func installerGui(installDir string, desc *installDescription) {
 					declarative.PushButton{
 						Text: "Install",
 						OnClicked: func() {
-							progress.SetValue(1)
 							topLabel.SetText("Installing...")
+
+							var progressCount uint64 = 0
+							go desc.install(installDir, func() {
+								mw.Synchronize(func() {
+									atomic.AddUint64(&progressCount, 1)
+									progress.SetValue(int(atomic.LoadUint64(&progressCount)))
+									log.Printf("progress now %d", progressCount)
+								})
+							})
 						},
 					},
 				},
 			},
 		},
-	}.Run()
+	}.Create()
+
+	if err != nil {
+		log.Panicf("Failed to create windows: %v", err)
+	}
+
+	mw.Run()
 }
 
 func main() {
@@ -235,6 +260,8 @@ func main() {
 	if err != nil {
 		log.Panicf("Failed to find local app data path")
 	}
+
+	installDir = path.Join(installDir, "sammydre", "golang-video-screensaver")
 
 	var installDesc = installDescription{
 		instances: []installInstance{
@@ -257,5 +284,4 @@ func main() {
 	}
 
 	installerGui(installDir, &installDesc)
-	// install(&installDesc, "C:\\Users\\sam\\AppData\\Local\\golang-video-screensaver")
 }
