@@ -5,24 +5,32 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch file",
-            "type": "go",
-            "request": "launch",
-            "mode": "debug",
-            "env": {
-                "CGO_CFLAGS": "-I${workspaceFolder}\\libvlc-3.0.16\\build\\x64\\include",
-                "CGO_LDFLAGS": "-L${workspaceFolder}\\libvlc-3.0.16\\build\\x64",
-                "PATH": "${env:PATH};${workspaceFolder}\\libvlc-3.0.16\\build\\x64"
-            },
-            "program": "cmd",
-            "args": ["--video-path", "\\Users\\sam\\Videos\\Screensaver\\Screensaver Videos"]
-        },
-        {
             "name": "Launch Package",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}"
+        },
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": 45380
+        },
+        {
+            "name": "Launch installer",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "${workspaceRoot}\\out\\VideoGalleryInstaller.exe",
+        },
+        {
+            "name": "Debug installer",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceRoot}\\cmd\\installer\\main.go"
         }
     ]
 }

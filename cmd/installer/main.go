@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lxn/walk"
 	"github.com/lxn/walk/declarative"
@@ -14,6 +15,29 @@ import (
 	screensaver "github.com/sammydre/golang-video-screensaver"
 	"github.com/sammydre/golang-video-screensaver/common"
 )
+
+func getTrimmedDestPath(filePath string, trimPath string, destPath string) string {
+	var fileDestPath string
+
+	if len(trimPath) > 0 {
+		destPathToAppend := path.Clean(filePath)
+		if strings.HasPrefix(destPathToAppend, trimPath) {
+			destPathToAppend = string(([]rune(destPathToAppend))[len(trimPath):])
+		} else if len(destPathToAppend) < len(trimPath) && destPathToAppend == trimPath[:len(destPathToAppend)] {
+			destPathToAppend = ""
+		}
+
+		if len(destPathToAppend) == 0 {
+			return ""
+		}
+
+		fileDestPath = path.Join(destPath, destPathToAppend)
+	} else {
+		fileDestPath = path.Join(destPath, filePath)
+	}
+
+	return fileDestPath
+}
 
 func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath string, progress func()) error {
 	dirEntries, err := fs.ReadDir(path.Clean(dirPath))
@@ -23,72 +47,66 @@ func recursiveFsInstaller(fs embed.FS, trimPath string, dirPath string, destPath
 
 	for _, dirEntry := range dirEntries {
 		filePath := path.Join(dirPath, dirEntry.Name())
-		var fileDestPath string
+		fileDestPath := getTrimmedDestPath(filePath, trimPath, destPath)
 
-		if len(trimPath) > 0 {
-			destPathToAppend := path.Clean(filePath)
-			if strings.HasPrefix(destPathToAppend, trimPath) {
-				destPathToAppend = string(([]rune(destPathToAppend))[len(trimPath):])
-			} else if len(destPathToAppend) < len(trimPath) && destPathToAppend == trimPath[:len(destPathToAppend)] {
-				destPathToAppend = ""
-			}
-
-			if len(destPathToAppend) == 0 {
-				log.Printf("Skipping %v due to match again trim %v", filePath, trimPath)
-
-				if dirEntry.IsDir() {
-					err = recursiveFsInstaller(fs, trimPath, filePath, destPath, progress)
-					if err != nil {
-						return err
-					}
-				}
-				continue
-			}
-
-			fileDestPath = path.Join(destPath, destPathToAppend)
+		if len(fileDestPath) == 0 {
+			log.Printf("Skipping %v due to match again trim %v", filePath, trimPath)
 		} else {
-			fileDestPath = path.Join(destPath, filePath)
-		}
+			log.Print(filePath, " -> ", fileDestPath)
 
-		log.Print(filePath, " -> ", fileDestPath)
+			var dirDestPath string
+			if dirEntry.IsDir() {
+				dirDestPath = fileDestPath
+			} else {
+				dirDestPath, _ = path.Split(fileDestPath)
+			}
 
-		if dirEntry.IsDir() {
-			err := os.MkdirAll(fileDestPath, 0)
+			err := os.MkdirAll(dirDestPath, 0)
 			if err != nil {
 				return err
 			}
 
+			if !dirEntry.IsDir() {
+				data, err := fs.ReadFile(filePath)
+				if err != nil {
+					// Unexpected, this should just work
+					return err
+				}
+
+				log.Printf("Writing source file %v -> %v of size %v", filePath, fileDestPath, len(data))
+
+				// The last argument here is a fs.FileMode, which we could obtain from dirEntry.Info().
+				// But it shouldn't be relevant to us here, especially on Windows.
+				err = os.WriteFile(fileDestPath, data, 0644)
+				if err != nil {
+					log.Printf("Error writing file %v, %v", fileDestPath, err)
+
+					file, err := os.Create(fileDestPath)
+					if err != nil {
+						log.Printf("Error creating file %v, %v", fileDestPath, err)
+					}
+					log.Panicf("file was %p", file)
+
+					// TODO: fmt.Errorf() for a better desc
+					return err
+				}
+
+				progress()
+			}
+		}
+
+		if dirEntry.IsDir() {
 			err = recursiveFsInstaller(fs, trimPath, filePath, destPath, progress)
 			if err != nil {
 				return err
 			}
-			// TODO: track
-		} else {
-			data, err := fs.ReadFile(filePath)
-			if err != nil {
-				// Unexpected, this should just work
-				return err
-			}
-
-			log.Printf("Writing source file %v -> %v of size %v", filePath, fileDestPath, len(data))
-
-			// The last argument here is a fs.FileMode, which we could obtain from dirEntry.Info().
-			// But it shouldn't be relevant to us here, especially on Windows.
-			err = os.WriteFile(fileDestPath, data, 0)
-			if err != nil {
-				log.Printf("Error writing file, %v", err)
-				// TODO: fmt.Errorf() for a better desc
-				return err
-			}
-
-			progress()
 		}
 	}
 
 	return nil
 }
 
-func recursiveFsCount(fs embed.FS, dirPath string) int {
+func recursiveFsCount(fs embed.FS, trimPath, dirPath string) int {
 	dirEntries, err := fs.ReadDir(path.Clean(dirPath))
 	if err != nil {
 		return 0
@@ -97,9 +115,13 @@ func recursiveFsCount(fs embed.FS, dirPath string) int {
 	var ret = 0
 
 	for _, dirEntry := range dirEntries {
+		filePath := path.Join(dirPath, dirEntry.Name())
 		if dirEntry.IsDir() {
-			ret += recursiveFsCount(fs, path.Join(dirPath, dirEntry.Name()))
+			ret += recursiveFsCount(fs, trimPath, filePath)
 		} else {
+			if len(getTrimmedDestPath(filePath, trimPath, "/")) == 0 {
+				continue
+			}
 			ret += 1
 		}
 	}
@@ -119,7 +141,7 @@ func (fid *fsInstallDescripion) install(destPath string, progress func()) error 
 }
 
 func (fid *fsInstallDescripion) count() int {
-	return recursiveFsCount(fid.fs, ".")
+	return recursiveFsCount(fid.fs, fid.trimPath, ".")
 }
 
 type fileInstallDescription struct {
@@ -130,14 +152,19 @@ type fileInstallDescription struct {
 
 func (fid *fileInstallDescription) install(destPath string, progress func()) error {
 	destPath = path.Join(destPath, fid.addPath)
+	fileDestPath := path.Join(destPath, fid.name)
+
+	log.Printf("Writing source file %v -> %v of size %v", fid.name, fileDestPath, len(fid.data))
 
 	err := os.MkdirAll(destPath, 0)
 	if err != nil {
+		log.Printf("Error in MkdirAll(%v): %v", destPath, err)
 		return err
 	}
 
-	err = os.WriteFile(path.Join(destPath, fid.name), fid.data, 0)
+	err = os.WriteFile(fileDestPath, fid.data, 0644)
 	if err != nil {
+		log.Printf("Error in WriteFile(%v): %v", fileDestPath, err)
 		return err
 	}
 
@@ -158,6 +185,8 @@ type registryInstallDescription struct {
 
 func (rid *registryInstallDescription) install(destPath string, progress func()) error {
 	value := strings.Replace(rid.value, "${InstallPath}", destPath, -1)
+
+	log.Printf("Writing registry entry %s / %s", rid.subKeyPath, rid.valueName)
 
 	ret := common.RegistrySaveString(rid.subKeyPath, rid.valueName, value)
 	progress()
@@ -200,6 +229,8 @@ func installerGui(installDir string, desc installInstance) {
 	var mw *walk.MainWindow
 	var progress *walk.ProgressBar
 	var topLabel *walk.Label
+	var mainButton *walk.PushButton
+	var progressTimer *time.Timer
 
 	numItemsToInstall := desc.count()
 
@@ -229,18 +260,43 @@ func installerGui(installDir string, desc installInstance) {
 				Children: []declarative.Widget{
 					declarative.HSpacer{},
 					declarative.PushButton{
-						Text: "Install",
+						AssignTo: &mainButton,
+						Text:     "Install",
 						OnClicked: func() {
 							topLabel.SetText("Installing...")
+							mainButton.SetText("OK")
+							mainButton.SetEnabled(false)
 
 							var progressCount uint64 = 0
 							go desc.install(installDir, func() {
-								mw.Synchronize(func() {
-									atomic.AddUint64(&progressCount, 1)
-									progress.SetValue(int(atomic.LoadUint64(&progressCount)))
-									log.Printf("progress now %d", progressCount)
+								atomic.AddUint64(&progressCount, 1)
+								log.Printf("progress now %d / %d", progressCount, numItemsToInstall)
+
+								if atomic.LoadUint64(&progressCount) == uint64(numItemsToInstall) {
+									mw.Synchronize(func() {
+										mainButton.SetEnabled(true)
+										mainButton.Clicked().Detach(0)
+										mainButton.Clicked().Attach(func() {
+											mw.Close()
+										})
+									})
+
+								}
+
+								if progressTimer != nil {
+									return
+								}
+
+								progressTimer = time.AfterFunc(time.Millisecond*25, func() {
+									mw.Synchronize(func() {
+										log.Printf("updating progress")
+										progress.SetValue(int(atomic.LoadUint64(&progressCount)))
+									})
+									progressTimer = nil
 								})
 							})
+
+							log.Print("Installing started async")
 						},
 					},
 				},
