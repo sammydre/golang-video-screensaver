@@ -51,7 +51,7 @@ Invoke-NativeCommand go build -v -ldflags -H=windowsgui -o "out/VideoGallery.scr
 
 # We'll probably want -ldflags -H=windowsgui in the fullness of time
 Write-Output "Building installer"
-Invoke-NativeCommand go build -v -o "out/VideoGalleryInstaller.exe" github.com/sammydre/golang-video-screensaver/cmd/installer
+Invoke-NativeCommand go build -v -ldflags -H=windowsgui -o "out/VideoGalleryInstaller.exe" github.com/sammydre/golang-video-screensaver/cmd/installer
 
 if (-not($DontCompress)) {
     Write-Output "Compressing installer"

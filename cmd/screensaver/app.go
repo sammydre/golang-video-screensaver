@@ -248,7 +248,7 @@ func runScreenSaver(parent win.HWND) {
 
 	monitorRects := listMonitors()
 
-	newpath := os.Getenv("PATH") + ";" + InstallPath + "\\out\\libvlc-3.0.16\\build\\x64"
+	newpath := os.Getenv("PATH") + ";" + InstallPath
 	log.Print("Setting PATH to: ", newpath)
 	os.Setenv("PATH", newpath)
 
